@@ -14,5 +14,6 @@
 
 from .loader import FastLanguageModel
 from .llama import FastLlamaModel
+from .gemma import FastGemmaModel
 from .mistral import FastMistralModel
 from .dpo import PatchDPOTrainer
