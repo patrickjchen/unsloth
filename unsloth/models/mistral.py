@@ -349,6 +349,7 @@ class FastMistralModel(FastLlamaModel):
                 bnb_4bit_quant_type       = "nf4",
                 bnb_4bit_compute_dtype    = dtype,
                 load_in_8bit_fp32_cpu_offload   = True,
+                llm_int8_enable_fp32_cpu_offload = True,
             )
 
         max_position_embeddings = max(max_seq_length, model_max_seq_length)

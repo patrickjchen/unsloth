@@ -1063,6 +1063,7 @@ class FastLlamaModel:
                 bnb_4bit_quant_type       = "nf4",
                 bnb_4bit_compute_dtype    = dtype,
                 load_in_8bit_fp32_cpu_offload = True,
+                llm_int8_enable_fp32_cpu_offload = True,
             )
         pass
 
@@ -1319,8 +1320,8 @@ class FastLlamaModel:
                 pass
             pass
             # Downcast RoPE embedding to correct data type
-            if (name.endswith("rotary_emb") or hasattr(module, "cos_cached")) \
-                and (module.cos_cached.dtype != correct_dtype):
+            if (name.endswith("rotary_emb") and (hasattr(module, "cos_cached") \
+                and (module.cos_cached.dtype != correct_dtype)) ):
                 
                 module.cos_cached = module.cos_cached.to(correct_dtype)
                 module.sin_cached = module.sin_cached.to(correct_dtype)

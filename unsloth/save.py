@@ -163,7 +163,7 @@ def unsloth_save_model(
     is_main_process      : bool = True,
     state_dict           : Optional[dict] = None,
     save_function        : Callable = torch.save,
-    max_shard_size       : Union[int, str] = "5GB",
+    max_shard_size       : Union[int, str] = "6GB",
     safe_serialization   : bool = True,
     variant              : Optional[str] = None,
     save_peft_format     : bool = True,
@@ -181,6 +181,7 @@ def unsloth_save_model(
     temporary_location   : str = "_unsloth_temporary_saved_buffers",
     maximum_memory_usage : float = 0.9,
 ):
+
     if token is None and "HF_TOKEN" in os.environ:
         token = os.environ["HF_TOKEN"]
 
@@ -543,6 +544,7 @@ def unsloth_save_model(
             logger.warning_once(f"Unsloth: {key} is not a Tensor but a {type(value)}.")
         pass
     pass
+
 
     # Edit save_pretrained_settings
     # [TODO] _create_repo has errors due to **kwargs getting accepted
@@ -1023,7 +1025,7 @@ def unsloth_save_pretrained_merged(
     is_main_process      : bool = True,
     state_dict           : Optional[dict] = None,
     save_function        : Callable = torch.save,
-    max_shard_size       : Union[int, str] = "5GB",
+    max_shard_size       : Union[int, str] = "6GB",
     safe_serialization   : bool = True,
     variant              : Optional[str] = None,
     save_peft_format     : bool = True,
@@ -1065,7 +1067,7 @@ def unsloth_push_to_hub_merged(
     commit_message       : Optional[str] = "Trained with Unsloth",
     private              : Optional[bool] = None,
     token                : Union[bool, str, None] = None,
-    max_shard_size       : Union[int, str, None] = "5GB",
+    max_shard_size       : Union[int, str, None] = "6GB",
     create_pr            : bool = False,
     safe_serialization   : bool = True,
     revision             : str = None,
@@ -1233,7 +1235,7 @@ def unsloth_save_pretrained_gguf(
     is_main_process      : bool = True,
     state_dict           : Optional[dict] = None,
     save_function        : Callable = torch.save,
-    max_shard_size       : Union[int, str] = "5GB",
+    max_shard_size       : Union[int, str] = "6GB",
     safe_serialization   : bool = True,
     variant              : Optional[str] = None,
     save_peft_format     : bool = True,
@@ -1356,7 +1358,7 @@ def unsloth_push_to_hub_gguf(
     commit_message       : Optional[str] = "Trained with Unsloth",
     private              : Optional[bool] = None,
     token                : Union[bool, str, None] = None,
-    max_shard_size       : Union[int, str, None] = "5GB",
+    max_shard_size       : Union[int, str, None] = "6GB",
     create_pr            : bool = False,
     safe_serialization   : bool = True,
     revision             : str = None,
