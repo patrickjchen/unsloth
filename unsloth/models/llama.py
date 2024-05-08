@@ -1017,6 +1017,12 @@ class FastLlamaModel:
         trust_remote_code = False,
         **kwargs,
     ):
+        if token is None and "HF_TOKEN" in os.environ:
+            token = os.environ["HF_TOKEN"]
+
+        if token is None and "HUGGINGFACE_TOKEN" in os.environ:
+            token = os.environ["HUGGINGFACE_TOKEN"]
+
         if model_patcher is None: model_patcher = FastLlamaModel
         SUPPORTS_BFLOAT16 = torch.cuda.is_bf16_supported()
         gpu_stats = torch.cuda.get_device_properties(0)
@@ -1280,6 +1286,15 @@ class FastLlamaModel:
         # Add save modules
         patch_saving_functions(model)
 
+        # Save tokenizer for inference purposes
+        tokenizer.padding_side = "left" # Force inference
+        internal_model = model
+        while hasattr(internal_model, "model"):
+            internal_model._saved_temp_tokenizer = tokenizer
+            internal_model = internal_model.model
+        pass
+        internal_model._saved_temp_tokenizer = tokenizer
+        
         return model, tokenizer
     pass
 
@@ -1441,14 +1456,18 @@ class FastLlamaModel:
                                       "gate_proj", "up_proj", "down_proj",),)
         model.config.update({"unsloth_version" : __version__})
 
+        if type(modules_to_save) is tuple:
+            modules_to_save = list(modules_to_save)
+        pass
+
         train_lm_head = False
         train_embed_tokens = False
         final_modules = []
         for module in target_modules:
             if module == "lm_head":
                 logger.warning_once(
-                    "Unsloth: `lm_head` should be placed in `modules_to_save` and not `target_modules`."\
-                    "We shall do it for you!"
+                    "Unsloth: `lm_head` should be placed in `modules_to_save` and not `target_modules`. "\
+                    "Luckily, we shall do it for you!"
                 )
                 train_lm_head = True
                 if modules_to_save is None: modules_to_save = ["lm_head"]
@@ -1456,8 +1475,8 @@ class FastLlamaModel:
 
             elif module == "embed_tokens":
                 logger.warning_once(
-                    "Unsloth: `embed_tokens` should be placed in `modules_to_save` and not `target_modules`."\
-                    "We shall do it for you!"
+                    "Unsloth: `embed_tokens` should be placed in `modules_to_save` and not `target_modules`. "\
+                    "Luckily, we shall do it for you!"
                 )
                 train_embed_tokens = True
                 if modules_to_save is None: modules_to_save = ["embed_tokens"]
@@ -1468,6 +1487,35 @@ class FastLlamaModel:
                 final_modules.append(module)
         pass
 
+        # Check if we added new tokens!
+        if hasattr(model, "_need_to_train_embeddings"):
+            if not train_lm_head or not train_embed_tokens:
+                print(
+                    "Unsloth: You added new tokens but did not specify if you wanted to "\
+                    "train the lm_head and embed_tokens.\nWe must turn it on for you."
+                )
+                train_lm_head = True
+                train_embed_tokens = True
+
+                if modules_to_save is None: modules_to_save = ["embed_tokens"]
+                else: modules_to_save.append("embed_tokens")
+
+                if modules_to_save is None: modules_to_save = ["lm_head"]
+                else: modules_to_save.append("lm_head")
+            pass
+        pass
+
+        # Check for Llama-3
+        # if hasattr(model._saved_temp_tokenizer, "_using_llama3_template"):
+        #     if not train_embed_tokens and not train_lm_head:
+        #         raise RuntimeError("")
+
+        # First fix untrained tokens
+        # Wrong - can cause reserved tokens to pop out!!
+        # if train_embed_tokens or train_lm_head:
+        #     fix_untrained_tokens(model, eps = 1e-16)
+        # pass
+
         # Check modules_to_save
         if modules_to_save is not None:
             for module in modules_to_save:
@@ -1475,7 +1523,14 @@ class FastLlamaModel:
                     train_lm_head = True
                 elif module == "embed_tokens":
                     train_embed_tokens = True
+                else:
+                    raise TypeError(
+                        f"Unsloth: Module = {module} is not allowed. Only 'lm_head' and 'embed_tokens' is allowed."
+                    )
             pass
+        pass
+        if isinstance(modules_to_save, (tuple, list)):
+            modules_to_save = list(set(modules_to_save))
         pass
 
         # Get LoRA
@@ -1496,8 +1551,12 @@ class FastLlamaModel:
         if not SUPPORTS_LOFTQ:  del arguments["loftq_config"]
         if not SUPPORTS_RSLORA: del arguments["use_rslora"]
 
+        _saved_temp_tokenizer = model._saved_temp_tokenizer
+
         lora_config = LoraConfig(**arguments)
         model = _get_peft_model(model, lora_config)
+
+        model._saved_temp_tokenizer = _saved_temp_tokenizer
 
         model = FastLlamaModel.patch_peft_model(model, use_gradient_checkpointing)
 
@@ -1514,6 +1573,18 @@ class FastLlamaModel:
             assert(hasattr(model.model.lm_head, "modules_to_save"))
             model.model.lm_head.modules_to_save.default.to(torch.float32)
             model.model.lm_head.modules_to_save.default.requires_grad_(True)
+        pass
+
+        # Patch tokenizer to pad to the right
+        internal_model = model
+        while hasattr(internal_model, "model"):
+            if hasattr(internal_model, "_saved_temp_tokenizer"):
+                internal_model._saved_temp_tokenizer.padding_side = "right"
+            pass
+            internal_model = internal_model.model
+        pass
+        if hasattr(internal_model, "_saved_temp_tokenizer"):
+            internal_model._saved_temp_tokenizer.padding_side = "right"
         pass
 
         return model
@@ -1713,6 +1784,18 @@ class FastLlamaModel:
         # Wrap model.generate
         model._unwrapped_old_generate = model.generate
         model.generate = _wrap_fast_inference(model.generate, device_type, dtype)
+
+        # Patch tokenizer to pad to the left
+        internal_model = model
+        while hasattr(internal_model, "model"):
+            if hasattr(internal_model, "_saved_temp_tokenizer"):
+                internal_model._saved_temp_tokenizer.padding_side = "left"
+            pass
+            internal_model = internal_model.model
+        pass
+        if hasattr(internal_model, "_saved_temp_tokenizer"):
+            internal_model._saved_temp_tokenizer.padding_side = "left"
+        pass
     pass
 
 
@@ -1739,8 +1822,18 @@ class FastLlamaModel:
             model.generate = model._unwrapped_old_generate
             del model._unwrapped_old_generate
         pass
+
+        # Patch tokenizer to pad to the right
+        internal_model = model
+        while hasattr(internal_model, "model"):
+            if hasattr(internal_model, "_saved_temp_tokenizer"):
+                internal_model._saved_temp_tokenizer.padding_side = "right"
+            pass
+            internal_model = internal_model.model
+        pass
+        if hasattr(internal_model, "_saved_temp_tokenizer"):
+            internal_model._saved_temp_tokenizer.padding_side = "right"
+        pass
     pass
 pass
-
-
 

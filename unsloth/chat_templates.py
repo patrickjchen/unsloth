@@ -23,10 +23,7 @@ from transformers.models.llama.modeling_llama import logger
 from .save import patch_saving_functions
 import os
 import shutil
-from .tokenizer_utils import (
-    load_correct_tokenizer,
-    fix_sentencepiece_tokenizer,
-)
+from .tokenizer_utils import *
 from .models._utils import patch_tokenizer
 
 CHAT_TEMPLATES = {}
@@ -255,6 +252,34 @@ gemma_chatml_eos_token = (
 CHAT_TEMPLATES["gemma_chatml"] = (gemma_chatml_template, gemma_chatml_eos_token,)
 
 
+# Llama-3
+# Weirdly \n\n is needed?
+llama3_template = \
+    "{{ bos_token }}"\
+    "{% for message in messages %}"\
+        "{{ '<|start_header_id|>' + message['role'] + '<|end_header_id|>\n\n' + message['content'] | trim + '<|eot_id|>' }}"\
+    "{% endfor %}"\
+    "{% if add_generation_prompt %}"\
+        "{{ '<|start_header_id|>assistant<|end_header_id|>\n\n' }}"\
+    "{% endif %}"
+llama3_template_eos_token = "eos_token"
+CHAT_TEMPLATES["llama-3"] = (llama3_template, llama3_template_eos_token,)
+
+
+# Phi-3
+phi3_template = \
+    "{{ bos_token }}"\
+    "{% for message in messages %}"\
+        "{% if (message['role'] == 'user') %}"\
+            "{{'<|user|>' + '\n' + message['content'] + '<|end|>' + '\n' + '<|assistant|>' + '\n'}}"\
+        "{% elif (message['role'] == 'assistant') %}"\
+            "{{message['content'] + '<|end|>' + '\n'}}"\
+        "{% endif %}"\
+    "{% endfor %}"
+phi3_template_eos_token = "<|end|>"
+CHAT_TEMPLATES["phi-3"] = (phi3_template, phi3_template_eos_token,)
+
+
 def get_chat_template(
     tokenizer,
     chat_template = "chatml",
@@ -270,9 +295,22 @@ def get_chat_template(
         IS_GEMMA = True
     pass
 
+    # We add a check for Llama-3
+    # if chat_template == "llama-3":
+    #     tokenizer._using_llama3_template = True
+    # else:
+    #     llama3_tokens = set(["<|end_header_id|>", "<|eot_id|>", "<|start_header_id|>"])
+    #     check_llama3_tokens = llama3_tokens & set(str(x) for x in tokenizer.added_tokens_decoder.values())
+    #     if len(check_llama3_tokens) == len(llama3_tokens):
+    #         tokenizer._using_llama3_template = True
+    #     pass
+    # pass
+
     # We first check if the tokenizer is a fast one. If not, we cannot convert this!
     is_fast_tokenizer = getattr(tokenizer, "is_fast", False)
     old_padding_side = tokenizer.padding_side
+
+    same_padding_token = False
 
     if type(chat_template) in (list, tuple,):
         chat_template, stop_word = chat_template
@@ -293,7 +331,7 @@ def get_chat_template(
 
         # Check fast tokenizer
         if not is_fast_tokenizer:
-            logger.warning_once(
+            print(
                 f"Unsloth: Not a fast tokenizer, so can't process it as of yet :(\n"\
                 "Please log a Github issue if you want this as a new feature!\n"\
                 "Your chat template will still work, but it won't add or edit tokens."
@@ -328,10 +366,24 @@ def get_chat_template(
             if skipped != len(token_mapping):
                 new_tokenizer = tokenizer._tokenizer.from_str(string_vocab)
 
+                # Careful on pad_token
+                old_pad_token = tokenizer.pad_token
+                if old_pad_token == tokenizer.eos_token:
+                    old_pad_token = stop_word
+                    same_padding_token = True
+                pass
+
                 if map_eos_token:
-                    new_tokenizer = tokenizer.__class__(tokenizer_object = new_tokenizer, eos_token = stop_word)
+                    new_tokenizer = tokenizer.__class__(
+                        tokenizer_object = new_tokenizer,
+                        eos_token = stop_word,
+                        pad_token = old_pad_token,
+                    )
                 else:
-                    new_tokenizer = tokenizer.__class__(tokenizer_object = new_tokenizer)
+                    new_tokenizer = tokenizer.__class__(
+                        tokenizer_object = new_tokenizer,
+                        pad_token = old_pad_token,
+                    )
                 pass
 
                 # Must fix the sentence piece tokenizer since there's no tokenizer.model file!
@@ -348,11 +400,38 @@ def get_chat_template(
             # But training the lm_head and embeddings are slow!
             # This is a HACK!
             # Idea from https://huggingface.co/cognitivecomputations/dolphin-2.6-mistral-7b-dpo-laser
+
+            old_bos_token = getattr(tokenizer, "bos_token", None)
+            old_eos_token = getattr(tokenizer, "eos_token", None)
+            old_pad_token = getattr(tokenizer, "pad_token", None)
+            old_unk_token = getattr(tokenizer, "unk_token", None)
+
             string_vocab = tokenizer._tokenizer.to_str()
-            old_eos_token = tokenizer.eos_token
-            string_vocab = string_vocab.replace(old_eos_token, stop_word)
+            # First check if new stop_word is in the tokenizer
+            if stop_word in string_vocab:
+                # We shall swap them around
+                temporary_stop_token = "<|:__TEMP//STOP//TOKEN__:|>"
+                string_vocab = string_vocab.replace(old_eos_token, temporary_stop_token)
+                string_vocab = string_vocab.replace(stop_word, old_eos_token)
+                string_vocab = string_vocab.replace(temporary_stop_token, stop_word)
+            else:
+                string_vocab = string_vocab.replace(old_eos_token, stop_word)
+            pass
             new_tokenizer = tokenizer._tokenizer.from_str(string_vocab)
-            new_tokenizer = tokenizer.__class__(tokenizer_object = new_tokenizer, eos_token = stop_word)
+
+            # Careful on pad_token
+            if old_pad_token == old_eos_token:
+                old_pad_token = stop_word
+                same_padding_token = True
+            pass
+
+            new_tokenizer = tokenizer.__class__(
+                tokenizer_object = new_tokenizer,
+                bos_token = old_bos_token,
+                eos_token = stop_word,
+                unk_token = old_unk_token,
+                pad_token = old_pad_token,
+            )
 
             # Must fix the sentence piece tokenizer since there's no tokenizer.model file!
             token_mapping = { old_eos_token : stop_word, }
@@ -390,9 +469,11 @@ def get_chat_template(
     new_pad_token = getattr(tokenizer,     "pad_token", None)
     new_bos_token = getattr(tokenizer,     "bos_token", None)
     new_unk_token = getattr(tokenizer,     "unk_token", None)
-    if old_pad_token != new_pad_token: tokenizer.pad_token = old_pad_token
     if old_bos_token != new_bos_token: tokenizer.bos_token = old_bos_token
     if old_unk_token != new_unk_token: tokenizer.unk_token = old_unk_token
+    if not same_padding_token:
+        if old_pad_token != new_pad_token: tokenizer.pad_token = old_pad_token
+    pass
 
     # stopping_criteria = create_stopping_criteria(tokenizer, stop_word)
 
@@ -520,4 +601,20 @@ def test_chat_templates():
     correct_tokenizer.chat_template = gemma_template
     our_prompt = correct_tokenizer.apply_chat_template(messages[1:], tokenize = False, add_generation_prompt = True)
     assert(our_prompt == correct_prompt)
+
+    # Llama-3
+    template = llama3_template
+    correct_tokenizer = AutoTokenizer.from_pretrained("unsloth/llama-3-8b-Instruct")
+    correct_prompt = correct_tokenizer.apply_chat_template(messages, tokenize = False, add_generation_prompt = True)
+    correct_tokenizer.chat_template = template
+    our_prompt = correct_tokenizer.apply_chat_template(messages, tokenize = False, add_generation_prompt = True)
+    assert(correct_prompt == our_prompt)
+
+    # Phi-3
+    template = phi3_template
+    correct_tokenizer = AutoTokenizer.from_pretrained("microsoft/Phi-3-mini-4k-instruct")
+    correct_prompt = correct_tokenizer.apply_chat_template(messages, tokenize = False, add_generation_prompt = True)
+    correct_tokenizer.chat_template = template
+    our_prompt = correct_tokenizer.apply_chat_template(messages, tokenize = False, add_generation_prompt = True)
+    assert(correct_prompt == our_prompt)
 pass

@@ -6,11 +6,11 @@
     <img alt="unsloth logo" src="https://raw.githubusercontent.com/unslothai/unsloth/main/images/unsloth%20logo%20black%20text.png" height="110" style="max-width: 100%;">
   </picture></a>
   
-<a href="https://colab.research.google.com/drive/1Dyauq4kTZoLewQ1cApceUQVNcnnNTzg_?usp=sharing"><img src="https://raw.githubusercontent.com/unslothai/unsloth/main/images/start free finetune button.png" height="48"></a>
+<a href="https://colab.research.google.com/drive/135ced7oHytdxu3N2DNe1Z0kqjyYIkDXp?usp=sharing"><img src="https://raw.githubusercontent.com/unslothai/unsloth/main/images/start free finetune button.png" height="48"></a>
 <a href="https://discord.gg/u54VK8m8tk"><img src="https://raw.githubusercontent.com/unslothai/unsloth/main/images/Discord button.png" height="48"></a>
 <a href="https://ko-fi.com/unsloth"><img src="https://raw.githubusercontent.com/unslothai/unsloth/main/images/buy me a coffee button.png" height="48"></a>
 
-### Finetune Mistral, Gemma, Llama 2-5x faster with 80% less memory!
+### Finetune Llama 3, Mistral & Gemma 2-5x faster with 80% less memory!
 
 ![](https://i.ibb.co/sJ7RhGG/image-41.png)
 
@@ -20,22 +20,25 @@
 
 All notebooks are **beginner friendly**! Add your dataset, click "Run All", and you'll get a 2x faster finetuned model which can be exported to GGUF, vLLM or uploaded to Hugging Face.
 
-| Unsloth supports          |    Free Notebooks                                                                                           | Performance | Memory use |
-|-----------------|--------------------------------------------------------------------------------------------------------------------------|-------------|----------|
-| **Gemma 7b**      | [▶️ Start on Colab](https://colab.research.google.com/drive/10NbwlsRChbma1v55m8LAPYG15uQv6HLo?usp=sharing)               | 2.4x faster | 71% less |
-| **Mistral 7b**    | [▶️ Start on Colab](https://colab.research.google.com/drive/1Dyauq4kTZoLewQ1cApceUQVNcnnNTzg_?usp=sharing)               | 2.2x faster | 73% less |
-| **Llama-2 7b**      | [▶️ Start on Colab](https://colab.research.google.com/drive/1lBzz5KeZJKXjvivbYvmGarix9Ao6Wxe5?usp=sharing)               | 2.2x faster | 60% less |
-| **TinyLlama**  | [▶️ Start on Colab](https://colab.research.google.com/drive/1AZghoNBQaMDgWJpi4RbffGM1h6raLUj9?usp=sharing)              | 3.9x faster | 82% less |
-| **CodeLlama 34b** A100   | [▶️ Start on Colab](https://colab.research.google.com/drive/1y7A0AxE3y8gdj4AVkl2aZX47Xu3P1wJT?usp=sharing)              | 1.9x faster | 49% less |
-| **Mistral 7b** 1xT4  | [▶️ Start on Kaggle](https://www.kaggle.com/code/danielhanchen/kaggle-mistral-7b-unsloth-notebook) | 5x faster\* | 73% less |
-| **DPO - Zephyr**     | [▶️ Start on Colab](https://colab.research.google.com/drive/15vttTpzzVXv_tJwEk-hIcQ0S9FcEWvwP?usp=sharing)               | 1.9x faster | 43% less |
+| Unsloth supports | Free Notebooks | Performance | Memory use |
+|-----------|---------|--------|----------|
+| **Llama 3 (8B)**      | [▶️ Start for free](https://colab.research.google.com/drive/135ced7oHytdxu3N2DNe1Z0kqjyYIkDXp?usp=sharing)               | 2x faster | 60% less |
+| **Mistral (7B)**    | [▶️ Start for free](https://colab.research.google.com/drive/1Dyauq4kTZoLewQ1cApceUQVNcnnNTzg_?usp=sharing)               | 2.2x faster | 73% less |
+| **Gemma (7B)**      | [▶️ Start for free](https://colab.research.google.com/drive/10NbwlsRChbma1v55m8LAPYG15uQv6HLo?usp=sharing)               | 2.4x faster | 71% less |
+| **ORPO**     | [▶️ Start for free](https://colab.research.google.com/drive/11t4njE3c4Lxl-07OD8lJSMKkfyJml3Tn?usp=sharing)               | 1.9x faster | 43% less |
+| **DPO Zephyr**     | [▶️ Start for free](https://colab.research.google.com/drive/15vttTpzzVXv_tJwEk-hIcQ0S9FcEWvwP?usp=sharing)               | 1.9x faster | 43% less |
+| **Phi-3 (3.8B)** | [▶️ Start for free](https://colab.research.google.com/drive/1NvkBmkHfucGO3Ve9s1NKZvMNlw5p83ym?usp=sharing)               | 2x faster | 50% less |
+| **TinyLlama**  | [▶️ Start for free](https://colab.research.google.com/drive/1AZghoNBQaMDgWJpi4RbffGM1h6raLUj9?usp=sharing)               | 3.9x faster | 74% less |
 
 - Benchmarking compared to FA2 + Hugging Face combined.
-- This [conversational notebook](https://colab.research.google.com/drive/1Aau3lgPzeZKQ-98h69CCu1UJcvIBLmy2?usp=sharing) is useful for ShareGPT ChatML / Vicuna templates.
-- This [text completion notebook](https://colab.research.google.com/drive/1ef-tab5bhkvWmBOObepl1WgJvfvSzn5Q?usp=sharing) is for raw text. This [DPO notebook](https://colab.research.google.com/drive/15vttTpzzVXv_tJwEk-hIcQ0S9FcEWvwP?usp=sharing) replicates Zephyr.
-- \* Kaggle has 2x T4s, but we use 1. Due to overhead, 1x T4 is 5x faster.
+- **Kaggle Notebooks** for [Llama-3 8b](https://www.kaggle.com/code/danielhanchen/kaggle-llama-3-8b-unsloth-notebook), [Gemma 7b](https://www.kaggle.com/code/danielhanchen/kaggle-gemma-7b-unsloth-notebook/), [Mistral 7b](https://www.kaggle.com/code/danielhanchen/kaggle-mistral-7b-unsloth-notebook)
+- This [conversational notebook](https://colab.research.google.com/drive/1XamvWYinY6FOSX9GLvnqSjjsNflxdhNc?usp=sharing) is useful for Llama-3. And ChatML for [Mistral 7b](https://colab.research.google.com/drive/1Aau3lgPzeZKQ-98h69CCu1UJcvIBLmy2?usp=sharing).
+- This [text completion notebook](https://colab.research.google.com/drive/1ef-tab5bhkvWmBOObepl1WgJvfvSzn5Q?usp=sharing) is for continued pretraining / raw text.
 
 ## 🦥 Unsloth.ai News
+- 📣 NEW! [Llama-3 8b](https://colab.research.google.com/drive/135ced7oHytdxu3N2DNe1Z0kqjyYIkDXp?usp=sharing) now works! Llama-3 70b also works (change the model name in the notebook).
+- 📣 NEW! [ORPO support](https://colab.research.google.com/drive/11t4njE3c4Lxl-07OD8lJSMKkfyJml3Tn?usp=sharing) is here!
+- 📣 NEW! [Phi-3 3.8b support](https://colab.research.google.com/drive/1NvkBmkHfucGO3Ve9s1NKZvMNlw5p83ym?usp=sharing) is here!
 - 📣 NEW! We cut memory usage by a [further 30%](https://unsloth.ai/blog/long-context) and now support fine-tuning of LLMs with [4x longer context windows](https://unsloth.ai/blog/long-context)! No change required if you're using our notebooks. To enable, simply change 1 line:
 ```python
 model = FastLanguageModel.get_peft_model(
@@ -43,11 +46,8 @@ model = FastLanguageModel.get_peft_model(
     use_gradient_checkpointing = "unsloth", # <<<<<<<
 )
 ```
-- 📣 NEW! [CodeGemma](https://colab.research.google.com/drive/19lwcRk_ZQ_ZtX-qzFP3qZBBHZNcMD1hh?usp=sharing) now works along with [Gemma 7b](https://colab.research.google.com/drive/10NbwlsRChbma1v55m8LAPYG15uQv6HLo?usp=sharing) and [Gemma 2b](https://colab.research.google.com/drive/15gGm7x_jTm017_Ic8e317tdIpDG53Mtu?usp=sharing)
-- 📣 [2x faster inference](https://colab.research.google.com/drive/15vttTpzzVXv_tJwEk-hIcQ0S9FcEWvwP?usp=sharing) added for all our models
-- 📣 [DPO support](https://colab.research.google.com/drive/15vttTpzzVXv_tJwEk-hIcQ0S9FcEWvwP?usp=sharing) is now included. [More info](#DPO) on DPO
-- 📣 We did a [blog](https://huggingface.co/blog/unsloth-trl) with 🤗Hugging Face and are in their official docs! Check out the [SFT docs](https://huggingface.co/docs/trl/main/en/sft_trainer#accelerate-fine-tuning-2x-using-unsloth) and [DPO docs](https://huggingface.co/docs/trl/main/en/dpo_trainer#accelerate-dpo-fine-tuning-using-unsloth)
-- 📣 [Download models 4x faster](https://huggingface.co/collections/unsloth/)  from 🤗Hugging Face. Eg: `unsloth/mistral-7b-bnb-4bit`
+- 📣 [CodeGemma](https://colab.research.google.com/drive/19lwcRk_ZQ_ZtX-qzFP3qZBBHZNcMD1hh?usp=sharing) now works along with [Gemma 7b](https://colab.research.google.com/drive/10NbwlsRChbma1v55m8LAPYG15uQv6HLo?usp=sharing) and [Gemma 2b](https://colab.research.google.com/drive/15gGm7x_jTm017_Ic8e317tdIpDG53Mtu?usp=sharing)
+- 📣 [2x faster inference](https://colab.research.google.com/drive/1aqlNQi7MMJbynFDyOQteD2t0yVfjb9Zh?usp=sharing) added for all our models
 
 ## 🔗 Links and Resources
 | Type                            | Links                               |
@@ -182,18 +182,21 @@ max_seq_length = 2048 # Supports RoPE Scaling interally, so choose any!
 url = "https://huggingface.co/datasets/laion/OIG/resolve/main/unified_chip2.jsonl"
 dataset = load_dataset("json", data_files = {"train" : url}, split = "train")
 
-# 4bit pre quantized models we support - 4x faster downloading!
+# 4bit pre quantized models we support for 4x faster downloading + no OOMs.
 fourbit_models = [
     "unsloth/mistral-7b-bnb-4bit",
+    "unsloth/mistral-7b-instruct-v0.2-bnb-4bit",
     "unsloth/llama-2-7b-bnb-4bit",
-    "unsloth/llama-2-13b-bnb-4bit",
-    "unsloth/codellama-34b-bnb-4bit",
-    "unsloth/tinyllama-bnb-4bit",
-] # Go to https://huggingface.co/unsloth for more 4-bit models!
+    "unsloth/gemma-7b-bnb-4bit",
+    "unsloth/gemma-7b-it-bnb-4bit", # Instruct version of Gemma 7b
+    "unsloth/gemma-2b-bnb-4bit",
+    "unsloth/gemma-2b-it-bnb-4bit", # Instruct version of Gemma 2b
+    "unsloth/llama-3-8b-bnb-4bit", # [NEW] 15 Trillion token Llama-3
+    "unsloth/Phi-3-mini-4k-instruct-bnb-4bit",
+] # More models at https://huggingface.co/unsloth
 
-# Load Llama model
 model, tokenizer = FastLanguageModel.from_pretrained(
-    model_name = "unsloth/mistral-7b-bnb-4bit", # Supports Llama, Mistral - replace this!
+    model_name = "unsloth/llama-3-8b-bnb-4bit",
     max_seq_length = max_seq_length,
     dtype = None,
     load_in_4bit = True,
@@ -208,7 +211,8 @@ model = FastLanguageModel.get_peft_model(
     lora_alpha = 16,
     lora_dropout = 0, # Supports any, but = 0 is optimized
     bias = "none",    # Supports any, but = "none" is optimized
-    use_gradient_checkpointing = True,
+    # [NEW] "unsloth" uses 30% less VRAM, fits 2x larger batch sizes!
+    use_gradient_checkpointing = "unsloth", # True or "unsloth" for very long context
     random_state = 3407,
     max_seq_length = max_seq_length,
     use_rslora = False,  # We support rank stabilized LoRA
@@ -272,7 +276,8 @@ model = FastLanguageModel.get_peft_model(
     lora_alpha = 64,
     lora_dropout = 0, # Supports any, but = 0 is optimized
     bias = "none",    # Supports any, but = "none" is optimized
-    use_gradient_checkpointing = True,
+    # [NEW] "unsloth" uses 30% less VRAM, fits 2x larger batch sizes!
+    use_gradient_checkpointing = "unsloth", # True or "unsloth" for very long context
     random_state = 3407,
     max_seq_length = max_seq_length,
 )

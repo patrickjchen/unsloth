@@ -18,6 +18,7 @@ from peft.tuners.lora import Linear as Peft_Linear
 from typing import Optional, Callable, Union, List
 import torch
 import os
+import shutil
 import pickle
 import gc
 from transformers.models.llama.modeling_llama import logger
@@ -25,6 +26,7 @@ from .kernels import fast_dequantize, QUANT_STATE, get_lora_parameters
 import subprocess
 import psutil
 import re
+from transformers.models.llama.modeling_llama import logger
 
 __all__ = [
     "print_quantization_methods",
@@ -86,6 +88,24 @@ def print_quantization_methods():
 pass
 
 
+def check_if_sentencepiece_model(model, temporary_location = "_unsloth_sentencepiece_temp"):
+    if not hasattr(model, "_saved_temp_tokenizer"): return False
+
+    temp_tokenizer = model._saved_temp_tokenizer
+    sentencepiece_model = False
+    file_location = f"{temporary_location}/{temp_tokenizer.name_or_path}"
+    if not os.path.exists(file_location):
+        os.makedirs(file_location)
+    pass
+    temp_tokenizer.save_pretrained(file_location)
+    if os.path.isfile(f"{file_location}/tokenizer.model"):
+        sentencepiece_model = True
+    pass
+    shutil.rmtree(file_location)
+    return sentencepiece_model
+pass
+
+
 def _free_cached_model(model):
     from huggingface_hub import scan_cache_dir
     cached_repos = list(scan_cache_dir().repos)
@@ -118,14 +138,14 @@ def _merge_lora(layer, name):
             W = fast_dequantize(W, quant_state)
         else:
             dtype = W.dtype
-        # W = W.to(torch.float32).t()
-        W = W.t()
+        W = W.to(torch.float32).t()
+        # W = W.t()
 
         if A is not None:
             # sAB = (A.t().to(torch.float32) @ (s * B.t().to(torch.float32)))
             # W += sAB
-            # W.addmm_(A.t().to(torch.float32), B.t().to(torch.float32), alpha = s)
-            W.addmm_(A.t().to(W.dtype), B.t().to(W.dtype), alpha = s)
+            W.addmm_(A.t().to(torch.float32), B.t().to(torch.float32), alpha = s)
+            # W.addmm_(A.t().to(W.dtype), B.t().to(W.dtype), alpha = s)
             # if not torch.isfinite(W).all():
             maximum_element = torch.max(W.min().abs(), W.max())
             if not torch.isfinite(maximum_element).item():
@@ -328,7 +348,7 @@ def unsloth_save_model(
         if hasattr(model, "config"):
             print(f"Saved {save_method} model to https://huggingface.co/" + save_directory)
         pass
-        return save_directory
+        return save_directory, None
     pass
 
     # Tokenizer has different saving arguments
@@ -403,7 +423,7 @@ def unsloth_save_model(
         pass
 
         print(" Done.")
-        return save_directory
+        return save_directory, None
     pass
 
     # If push_to_hub, we must remove the .../ part of a repo
@@ -691,19 +711,25 @@ pass
 
 
 def install_llama_cpp_clone_non_blocking():
-    full_command = ["git", "clone", "https://github.com/ggerganov/llama.cpp"]
+    full_command = ["git", "clone", "--recursive", "https://github.com/ggerganov/llama.cpp"]
     run_installer = subprocess.Popen(full_command, stdout = subprocess.DEVNULL, stderr = subprocess.STDOUT)
     return run_installer
 pass
 
 
 def install_llama_cpp_make_non_blocking():
-    env = { **os.environ, "LLAMA_CUDA": "1", }
+    # https://github.com/ggerganov/llama.cpp/issues/7062
+    # Weirdly GPU conversion for GGUF breaks??
+    # env = { **os.environ, "LLAMA_CUDA": "1", }
     n_jobs = max(int(psutil.cpu_count()*1.5), 1)
     # Force make clean
     os.system("make clean -C llama.cpp")
     full_command = ["make", "all", "-j"+str(n_jobs), "-C", "llama.cpp"]
-    run_installer = subprocess.Popen(full_command, env = env, stdout = subprocess.DEVNULL, stderr = subprocess.STDOUT)
+
+    # https://github.com/ggerganov/llama.cpp/issues/7062
+    # Weirdly GPU conversion for GGUF breaks??
+    # run_installer = subprocess.Popen(full_command, env = env, stdout = subprocess.DEVNULL, stderr = subprocess.STDOUT)
+    run_installer = subprocess.Popen(full_command, stdout = subprocess.DEVNULL, stderr = subprocess.STDOUT)
     return run_installer
 pass
 
@@ -744,7 +770,7 @@ def install_llama_cpp_old(version = -10):
     # Clone a specific commit
     # Also don't use the GPU!
     commands = [
-        "git clone https://github.com/ggerganov/llama.cpp",
+        "git clone --recursive https://github.com/ggerganov/llama.cpp",
         f"cd llama.cpp && git reset --hard {version} && git clean -df",
         "make clean -C llama.cpp",
         f"make all -j{psutil.cpu_count()*2} -C llama.cpp",
@@ -766,12 +792,17 @@ pass
 
 
 def install_llama_cpp_blocking(use_cuda = True):
-    use_cuda = "LLAMA_CUDA=1" if use_cuda else ""
+    # https://github.com/ggerganov/llama.cpp/issues/7062
+    # Weirdly GPU conversion for GGUF breaks??
+    # use_cuda = "LLAMA_CUDA=1" if use_cuda else ""
 
     commands = [
-        "git clone https://github.com/ggerganov/llama.cpp",
+        "git clone --recursive https://github.com/ggerganov/llama.cpp",
         "make clean -C llama.cpp",
-        f"{use_cuda} make all -j{psutil.cpu_count()*2} -C llama.cpp",
+        # https://github.com/ggerganov/llama.cpp/issues/7062
+        # Weirdly GPU conversion for GGUF breaks??
+        # f"{use_cuda} make all -j{psutil.cpu_count()*2} -C llama.cpp",
+        f"make all -j{psutil.cpu_count()*2} -C llama.cpp",
         "pip install gguf protobuf",
     ]
     if os.path.exists("llama.cpp"): return
@@ -830,19 +861,25 @@ pass
 
 def save_to_gguf(
     model_type           : str,
+    is_sentencepiece     : bool = False,
     model_directory      : str = "unsloth_finetuned_model",
     quantization_method  : str = "fast_quantized",
     first_conversion     : str = "f16",
     _run_installer = None, # Non blocking install of llama.cpp
 ):
-    from transformers.models.llama.modeling_llama import logger
+    logger.warning(
+        "NOTICE: llama.cpp GGUF conversion is currently unstable, since llama.cpp is\n"\
+        "undergoing some major bug fixes as at 5th of May 2024. This is not an Unsloth issue.\n"\
+        "Please be patient - GGUF saving should still work, but might not work as well."
+    )
 
     if quantization_method.startswith("iq2"):
         raise RuntimeError("Unsloth: Currently iq2 type quantizations aren't supported yet - sorry!")
 
     # Careful convert.py is only for Llama / Mistral based archs
     use_fast_convert = False
-    if   model_type == "llama":   use_fast_convert = True
+    if not is_sentencepiece:      use_fast_convert = False # Llama-3
+    elif model_type == "llama":   use_fast_convert = True
     elif model_type == "mistral": use_fast_convert = True
     pass
     logger.warning_once(f"Unsloth: Converting {model_type} model. Can use fast conversion = {use_fast_convert}.")
@@ -924,13 +961,20 @@ def save_to_gguf(
           f"The output location will be {final_location}\n"\
           "This will take 3 minutes...")
 
+    # We first check if tokenizer.model exists in the model_directory
+    if os.path.exists(f"{model_directory}/tokenizer.model"):
+        vocab_type = "spm,hfft,bpe"
+    else:
+        vocab_type = "bpe"
+    pass
+
     if use_fast_convert:
         command = f"python llama.cpp/convert.py {model_directory} "\
-            f"--outfile {final_location} --vocab-type hfft "\
+            f"--outfile {final_location} --vocab-type {vocab_type} "\
             f"--outtype {first_conversion} --concurrency {n_cpus}"
     else:
         # Need to fix convert-hf-to-gguf.py for some models!
-        _fix_gemma_gguf()
+        # _fix_gemma_gguf()
 
         command = f"python llama.cpp/convert-hf-to-gguf.py {model_directory} "\
             f"--outfile {final_location} "\
@@ -961,8 +1005,8 @@ def save_to_gguf(
                 "You might have to compile llama.cpp yourself, then run this again.\n"\
                 "You do not need to close this Python program. Run the following commands in a new terminal:\n"\
                 "You must run this in the same folder as you're saving your model.\n"\
-                "git clone https://github.com/ggerganov/llama.cpp\n"\
-                "cd llama.cpp && make clean && LLAMA_CUDA=1 make all -j\n"\
+                "git clone --recursive https://github.com/ggerganov/llama.cpp\n"\
+                "cd llama.cpp && make clean && make all -j\n"\
                 "Once that's done, redo the quantization."
             )
         pass
@@ -1001,8 +1045,8 @@ def save_to_gguf(
                     "Unsloth: Quantization failed! You might have to compile llama.cpp yourself, then run this again.\n"\
                     "You do not need to close this Python program. Run the following commands in a new terminal:\n"\
                     "You must run this in the same folder as you're saving your model.\n"\
-                    "git clone https://github.com/ggerganov/llama.cpp\n"\
-                    "cd llama.cpp && make clean && LLAMA_CUDA=1 make all -j\n"\
+                    "git clone --recursive https://github.com/ggerganov/llama.cpp\n"\
+                    "cd llama.cpp && make clean && make all -j\n"\
                     "Once that's done, redo the quantization."
                 )
             pass
@@ -1332,7 +1376,10 @@ def unsloth_save_pretrained_gguf(
         gc.collect()
 
     model_type = self.config.model_type
-    file_location = save_to_gguf(model_type, new_save_directory, quantization_method, first_conversion, makefile)
+    is_sentencepiece_model = check_if_sentencepiece_model(self)
+    file_location = save_to_gguf(model_type, is_sentencepiece_model, 
+        new_save_directory, quantization_method, first_conversion, makefile,
+    )
 
     if push_to_hub:
         print("Unsloth: Uploading GGUF to Huggingface Hub...")
@@ -1452,7 +1499,10 @@ def unsloth_push_to_hub_gguf(
         gc.collect()
 
     model_type = self.config.model_type
-    file_location = save_to_gguf(model_type, new_save_directory, quantization_method, first_conversion, makefile)
+    is_sentencepiece_model = check_if_sentencepiece_model(self)
+    file_location = save_to_gguf(model_type, is_sentencepiece_model, 
+        new_save_directory, quantization_method, first_conversion, makefile,
+    )
 
     print("Unsloth: Uploading GGUF to Huggingface Hub...")
     username = upload_to_huggingface(

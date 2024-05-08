@@ -126,6 +126,24 @@ __INT_TO_FLOAT_MAPPER = \
         "unsloth/codegemma-7b-it",
         "google/codegemma-7b-it",
     ),
+    "unsloth/llama-3-8b-bnb-4bit" : (
+        "unsloth/llama-3-8b",
+        "meta-llama/Meta-Llama-3-8B",
+    ),
+    "unsloth/llama-3-8b-Instruct-bnb-4bit" : (
+        "unsloth/llama-3-8b-Instruct",
+        "meta-llama/Meta-Llama-3-8B-Instruct",
+    ),
+    "unsloth/llama-3-70b-bnb-4bit" : (
+        "meta-llama/Meta-Llama-3-70B",
+    ),
+    "unsloth/llama-3-70b-Instruct-bnb-4bit" : (
+        "meta-llama/Meta-Llama-3-70B-Instruct",
+    ),
+    "unsloth/Phi-3-mini-4k-instruct-bnb-4bit" : (
+        "unsloth/Phi-3-mini-4k-instruct",
+        "microsoft/Phi-3-mini-4k-instruct",
+    ),
 }
 
 INT_TO_FLOAT_MAPPER = {}

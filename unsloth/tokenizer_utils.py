@@ -18,11 +18,14 @@ from transformers import PreTrainedTokenizerFast
 import re
 import os
 from transformers.models.llama.modeling_llama import logger
+from peft import PeftModelForCausalLM
+import torch
 
 __all__ = [
     "load_correct_tokenizer",
     "fix_sentencepiece_tokenizer",
     "check_tokenizer",
+    "add_new_tokens",
 ]
 
 
@@ -48,7 +51,7 @@ def try_fix_tokenizer(tokenizer, prepend = True):
 
     tokenizer_string = converted_tokenizer.to_str()
 
-    # Llama does ▁apple. Sometimes this is wrong!!
+    # Llama does _apple. Sometimes this is wrong!!
     prepend_text = '{"type":"Prepend","prepend":"▁"},'
     if not prepend and prepend_text in tokenizer_string:
         tokenizer_string = tokenizer_string.replace(prepend_text, "", 1)
@@ -187,7 +190,7 @@ def assert_same_tokenization(slow_tokenizer, fast_tokenizer):
     all_special_tokens = list(set(special_tokens + slow_tokenizer.all_special_tokens))
     try:
         string = "\n".join(all_special_tokens) + \
-            "A quick brown fox jumps over the lazy dog!!\n\n" + \
+            "A quick brown fox jumps over the lazy dog!!\n\nHi</s>\n\n" + \
             "".join(all_special_tokens)
         return slow_tokenizer(string).input_ids == fast_tokenizer(string).input_ids
     except:
@@ -213,6 +216,11 @@ def fix_sentencepiece_tokenizer(
 
     if not os.path.exists(temporary_location):
         os.makedirs(temporary_location)
+    pass
+
+    # Check if tokenizer.model exists
+    if not os.path.isfile(f"{temporary_location}/tokenizer.model"):
+        return new_tokenizer
     pass
 
     # First save the old tokenizer
@@ -250,7 +258,11 @@ def fix_sentencepiece_tokenizer(
 
     # And load it!
     from transformers import AutoTokenizer
-    tokenizer = AutoTokenizer.from_pretrained(temporary_location, eos_token = new_tokenizer.eos_token)
+    tokenizer = AutoTokenizer.from_pretrained(
+        temporary_location,
+        eos_token = new_tokenizer.eos_token,
+        pad_token = new_tokenizer.pad_token,
+    )
     return tokenizer
 pass
 
@@ -269,15 +281,26 @@ def load_correct_tokenizer(
         cache_dir = None
     pass
 
-    slow_tokenizer = AutoTokenizer.from_pretrained(
-        tokenizer_name,
-        model_max_length  = model_max_length,
-        padding_side      = padding_side,
-        token             = token,
-        trust_remote_code = trust_remote_code,
-        use_fast          = False,
-        cache_dir         = cache_dir,
-    )
+    # Try loading the slow tokenizer. If it fails, then try Fast only
+    # Mainly to solve Deepseek models with no tokenizer.model file
+    slow_tokenizer = None
+    try:
+        slow_tokenizer = AutoTokenizer.from_pretrained(
+            tokenizer_name,
+            model_max_length  = model_max_length,
+            padding_side      = padding_side,
+            token             = token,
+            trust_remote_code = trust_remote_code,
+            use_fast          = False,
+            cache_dir         = cache_dir,
+        )
+    except:
+        print(
+            f"Unsloth: {tokenizer_name} has no tokenizer.model file.\n"\
+            "Just informing you about this - this is not a critical error."
+        )
+    pass
+
     fast_tokenizer = AutoTokenizer.from_pretrained(
         tokenizer_name,
         model_max_length  = model_max_length,
@@ -286,14 +309,21 @@ def load_correct_tokenizer(
         trust_remote_code = trust_remote_code,
         cache_dir         = cache_dir,
     )
-    fast_tokenizer.add_bos_token = slow_tokenizer.add_bos_token
-    fast_tokenizer.add_eos_token = slow_tokenizer.add_eos_token
-    
-    # Confirm if slow and fast are equivalent!
-    if assert_same_tokenization(slow_tokenizer, fast_tokenizer):
-        return fast_tokenizer
+
+    if slow_tokenizer is not None:
+        if hasattr(fast_tokenizer, "add_bos_token") and hasattr(slow_tokenizer, "add_bos_token"):
+            fast_tokenizer.add_bos_token = slow_tokenizer.add_bos_token
+        if hasattr(fast_tokenizer, "add_eos_token") and hasattr(slow_tokenizer, "add_eos_token"):
+            fast_tokenizer.add_eos_token = slow_tokenizer.add_eos_token
+        
+        # Confirm if slow and fast are equivalent!
+        if assert_same_tokenization(slow_tokenizer, fast_tokenizer):
+            return fast_tokenizer
+        else:
+            return convert_to_fast_tokenizer(slow_tokenizer)
+        pass
     else:
-        return convert_to_fast_tokenizer(slow_tokenizer)
+        return fast_tokenizer
     pass
 pass
 
@@ -408,26 +438,240 @@ def check_tokenizer(
                 cache_dir = None
             pass
 
-            # Try slow tokenizer which can fix things!
-            tokenizer = AutoTokenizer.from_pretrained(
-                model_name,
-                model_max_length = model_max_length,
-                padding_side = padding_side,
-                token = token,
-                use_fast = False,
-                cache_dir = cache_dir,
-            )
-            return check_tokenizer(
-                model = model,
-                tokenizer = tokenizer,
-                model_name = model_name,
-                model_max_length = model_max_length,
-                padding_side = padding_side,
-                token = token,
-                _reload = False,
-            )
-            break
+            # Sometimes slow tokenizer does not work like Deepseek
+            try:
+                # Try slow tokenizer which can fix things!
+                tokenizer = AutoTokenizer.from_pretrained(
+                    model_name,
+                    model_max_length = model_max_length,
+                    padding_side = padding_side,
+                    token = token,
+                    use_fast = False,
+                    cache_dir = cache_dir,
+                )
+                return check_tokenizer(
+                    model = model,
+                    tokenizer = tokenizer,
+                    model_name = model_name,
+                    model_max_length = model_max_length,
+                    padding_side = padding_side,
+                    token = token,
+                    _reload = False,
+                )
+                break
+            except:
+                # Tokenizer has out of bounds issues and we can't
+                # load the slow tokenizer version :(
+                logger.warning_once(
+                    "Unsloth: Tokenizer is most likely buggy, and Unsloth failed to repair it.\n"\
+                    "It will still work, but beware of out of bounds memory accesses.\n"\
+                    "Please file an issue on the model owner's repo about this issue."
+                )
+                return tokenizer
+            pass
         pass
     pass
     return convert_to_fast_tokenizer(tokenizer)
 pass
+
+
+@torch.inference_mode
+def fix_untrained_tokens(model, eps = 1e-16):
+    """
+    Llama-3 for eg has untrained vectors in the base model.
+    These include <|eot_id|>, <|start_header_id|>, <|end_header_id|>
+    We reset them to the mean of the rest of the tokens
+    """
+    embedding_matrix = model.get_input_embeddings ().weight.data
+    lm_head_matrix   = model.get_output_embeddings().weight.data
+
+    # Get untrained tokens
+    indicator_untrained = torch.amax(embedding_matrix, axis = 1) <= eps
+    where_untrained = torch.where(indicator_untrained)[0]
+    n_untrained = where_untrained.shape[0]
+    n_trained = embedding_matrix.shape[0] - n_untrained
+    if n_untrained != 0:
+        print(
+            f"Unsloth: Not an error, but your model has {n_untrained} untrained tokens.\n"\
+            "We shall set them to the mean of the other trained tokens."
+        )
+    pass
+
+    # First set untrained to all 0s - sometimes it's not! 1e-23 for bfloat16
+    embedding_matrix[where_untrained] = 0
+    lm_head_matrix  [where_untrained] = 0
+
+    # Find sum
+    sum_embedding  = torch.sum(embedding_matrix, dtype = torch.float32, axis = 0)
+    sum_lm_head    = torch.sum(lm_head_matrix,   dtype = torch.float32, axis = 0)
+
+    # Find correct average by dividing by sum of trained tokens
+    mean_embedding = (sum_embedding / n_trained).to(embedding_matrix.dtype)
+    mean_lm_head   = (sum_lm_head   / n_trained).to(lm_head_matrix  .dtype)
+
+    # Set them to the mean
+    embedding_matrix[where_untrained] = mean_embedding
+    lm_head_matrix  [where_untrained] = mean_lm_head
+
+    return mean_embedding, mean_lm_head
+pass
+
+
+@torch.inference_mode
+def mean_of_trained_tokens(model, eps = 1e-16):
+    """
+    Llama-3 for eg has untrained vectors in the base model.
+    These include <|eot_id|>, <|start_header_id|>, <|end_header_id|>
+    We reset them to the mean of the rest of the tokens
+    """
+    embedding_matrix = model.get_input_embeddings ().weight.data.clone()
+    lm_head_matrix   = model.get_output_embeddings().weight.data.clone()
+
+    # Get untrained tokens
+    indicator_untrained = torch.amax(embedding_matrix, axis = 1) <= eps
+    where_untrained = torch.where(indicator_untrained)[0]
+    n_untrained = where_untrained.shape[0]
+    n_trained = embedding_matrix.shape[0] - n_untrained
+    if n_untrained != 0:
+        print(
+            f"Unsloth: Not an error, but your model has {n_untrained} untrained tokens.\n"\
+            "We shall set them to the mean of the other trained tokens."
+        )
+    pass
+
+    # First set untrained to all 0s - sometimes it's not! 1e-23 for bfloat16
+    embedding_matrix[where_untrained] = 0
+    lm_head_matrix  [where_untrained] = 0
+
+    # Find sum
+    sum_embedding  = torch.sum(embedding_matrix, dtype = torch.float32, axis = 0)
+    sum_lm_head    = torch.sum(lm_head_matrix,   dtype = torch.float32, axis = 0)
+
+    # Find correct average by dividing by sum of trained tokens
+    mean_embedding = (sum_embedding / n_trained).to(embedding_matrix.dtype)
+    mean_lm_head   = (sum_lm_head   / n_trained).to(lm_head_matrix  .dtype)
+
+    return mean_embedding, mean_lm_head
+pass
+
+
+@torch.inference_mode
+def add_new_tokens(
+    model,
+    tokenizer,
+    new_tokens = [],
+    method = "mean",
+    interpolation = 0.5,
+):
+    """
+    Smartly resizes the tokenizer and adds new tokens to the model.
+    We also disregard untrained tokens by removing them from the mean calculation.
+    """
+    assert(isinstance(new_tokens, (list, tuple)))
+    assert(len(new_tokens) > 0)
+    assert(method == "mean" or method == "interpolation")
+    assert(interpolation >= 0 and interpolation <= 1)
+
+    # Check if tokens already exist
+    overlapping_tokens = set(new_tokens) & set(tokenizer.vocab.keys())
+    if len(overlapping_tokens) != 0:
+        print(
+            f"Unsloth: You're adding new_tokens = {new_tokens}\n"\
+            f"There are tokens which are overlapping = {list(overlapping_tokens)}\n"\
+            f"We shall safely ignore these overlapping tokens."
+        )
+        new_tokens = [x for x in new_tokens if x not in overlapping_tokens]
+    pass
+
+    # Get mean of trained tokens
+    # mean_embedding, mean_lm_head = fix_untrained_tokens(model)
+
+    # Weirdly be careful reserved tokens can pop out
+    mean_embedding, mean_lm_head = mean_of_trained_tokens(model)
+    mean_embedding = mean_embedding.to(torch.float32)
+    mean_lm_head   = mean_lm_head  .to(torch.float32)
+
+    # Add tokens!
+    old_length = len(tokenizer)
+    tokenizer.add_tokens(new_tokens)
+    model.resize_token_embeddings(len(tokenizer))
+
+    # If we use interpolation, we interpolate between the mean embeddings and
+    # the Word2Vec sum of the other vectors
+    embedding_matrix = model.get_input_embeddings ().weight.data
+    lm_head_matrix   = model.get_output_embeddings().weight.data
+
+    if method == "interpolation":
+        print(
+            "Unsloth: You are using interpolation to add new tokens.\n"\
+            f"We shall set new tokens = mean(embeddings)*{1-interpolation} + mean(new_tokens)*{interpolation}"
+        )
+        for j, token in enumerate(new_tokens):
+            input_ids = tokenizer(token, add_special_tokens = False).input_ids
+            mean_embedding_token = embedding_matrix[input_ids].mean(axis = 0, dtype = torch.float32)
+            mean_lm_head_token   = lm_head_matrix  [input_ids].mean(axis = 0, dtype = torch.float32)
+
+            # Interpolate
+            mean_embedding_token = mean_embedding*(1-interpolation) + mean_embedding_token*interpolation
+            mean_lm_head_token   = mean_lm_head  *(1-interpolation) + mean_lm_head_token  *interpolation
+
+            # Set the new vector
+            embedding_matrix[old_length+j] = mean_embedding_token
+            lm_head_matrix  [old_length+j] = mean_lm_head_token
+        pass
+    else:
+        # Now set the new tokens to the mean!
+        embedding_matrix[old_length:] = mean_embedding
+        lm_head_matrix  [old_length:] = mean_lm_head
+    pass
+
+    # We set a flag to say we need to train embeddings
+    internal_model = model
+    while hasattr(internal_model, "model"):
+        internal_model._need_to_train_embeddings = True
+        internal_model = internal_model.model
+    pass
+    internal_model._need_to_train_embeddings = True
+    
+    return
+pass
+
+
+from inspect import getsource
+import trl.trainer.sft_trainer
+from trl.trainer.sft_trainer import *
+
+def fix_sft_trainer_tokenizer():
+    """
+        Fixes double adding BOS tokens like in llama-3
+    """
+    for function_name, replacer in (
+        ("_prepare_non_packed_dataloader", "def tokenize(element):",),
+        # ("_prepare_packed_dataloader", "if dataset_text_field is not None",),
+    ):
+        function = getsource(eval(f"trl.trainer.sft_trainer.SFTTrainer.{function_name}"))
+        where = function.find("def")
+        function = function.split("\n")
+        function = "\n".join(x[where:] for x in function)
+
+        check_text = \
+        "\n"\
+        "test_text = dataset[0][dataset_text_field] if (formatting_func is None or not use_formatting_func) else formatting_func(dataset[0])\n"\
+        "chat_template = getattr(tokenizer, 'chat_template', None)\n"\
+        "chat_template = '' if chat_template is None else chat_template\n"\
+        "has_bos_token_already = test_text.startswith(tokenizer.bos_token) or tokenizer.bos_token in chat_template\n"\
+        "add_special_tokens = False if has_bos_token_already else add_special_tokens\n\n"
+
+        check_text = check_text.split("\n")
+        check_text = "\n".join(" "*where + x for x in check_text)
+
+        function = function.replace(replacer, check_text + replacer)
+        exec(function, globals())
+
+        # Replace TRL's SFTTrainer
+        exec(f"trl.trainer.sft_trainer.SFTTrainer.{function_name} = {function_name}", globals())
+    pass
+pass
+
+# Fixes double adding BOS tokens like in llama-3
+fix_sft_trainer_tokenizer()
